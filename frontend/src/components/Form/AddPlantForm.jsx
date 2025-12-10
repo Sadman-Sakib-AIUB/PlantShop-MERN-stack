@@ -9,7 +9,7 @@ import toast from "react-hot-toast";
 import { TbFidgetSpinner } from "react-icons/tb";
 
 const AddPlantForm = () => {
-  const { user } = useAuth();
+  const { user } = useAuth()
 
   // useMutation hook Usecase only for (POST || PUT || PATCH || DELETE)
   const {
@@ -22,7 +22,7 @@ const AddPlantForm = () => {
       await axios.post(`${import.meta.env.VITE_API_URL}/plants`, payload),
     onSuccess: (data) => {
       console.log(data);
-      toast.success("Plat added successfully");
+      toast.success("Plat Added Successfully");
       mutationReset();
       // query key invalidate
     },
