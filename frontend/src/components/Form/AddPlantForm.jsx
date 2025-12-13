@@ -40,7 +40,7 @@ const AddPlantForm = () => {
   } = useForm();
 
   const onSubmit = async (data) => {
-    const { name, price, description, quantity, image } = data;
+    const { name, price, description, category, quantity, image } = data;
     const imageFile = image[0];
     try {
       const imageUrl = await imageUpload(imageFile);
@@ -50,6 +50,7 @@ const AddPlantForm = () => {
         description,
         quantity: Number(quantity),
         price: Number(price),
+        category,
         seller: {
           image: user?.photoURL,
           name: user?.displayName,
