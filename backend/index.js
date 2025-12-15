@@ -52,6 +52,7 @@ async function run() {
   try {
     const db = client.db("plantsDB");
     const plantsCollection = db.collection("plants");
+    const ordersCollection = db.collection("orders");
 
     // Save plants data in DB
     app.post("/plants", async (req, res) => {
@@ -76,7 +77,7 @@ async function run() {
 
     //------------------------------------ Payment Endpoints ------------------------------
 
-    // It will take request from user with payment info.
+    // It will take request from user with payment info and will redirect to the payment page
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
       const session = await stripe.checkout.sessions.create({
@@ -100,12 +101,120 @@ async function run() {
           plantId: paymentInfo.plantId,
           customer: paymentInfo?.customer?.email,
         },
-        success_url: `${process.env.CLIENT_DOMAIN}/payment-success`,
+        success_url: `${process.env.CLIENT_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.CLIENT_DOMAIN}/plant/${paymentInfo?.plantId}`,
       });
 
-      res.send({url:session.url})
+      res.send({ url: session.url });
     });
+
+    // Check payment status & Save data into DB
+    app.post("/payment-success", async (req, res) => {
+      const { sessionId } = req.body;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      const plant = await plantsCollection.findOne({
+        _id: new ObjectId(session.metadata.plantId),
+      });
+
+      const order = await ordersCollection.findOne({
+        transactionId: session.payment_intent,
+      });
+
+      if (session.status === "complete" && plant && !order) {
+        // Save order data in DB
+        // Creating object which will save data in db
+        const orderInfo = {
+          plantId: session.metadata.plantId,
+          transactionId: session.payment_intent,
+          customer: session.metadata.customer,
+          status: "pending",
+          seller: plant.seller,
+          name: plant.name,
+          category: plant.category,
+          price: session.amount_total / 100,
+          quantity: 1,
+          image: plant.image,
+        };
+        const result = await ordersCollection.insertOne(orderInfo);
+
+        await plantsCollection.updateOne(
+          {
+            _id: new ObjectId(session.metadata.plantId),
+          },
+          {
+            $inc: { quantity: -1 },
+          }
+        );
+
+        return res.send({
+          transactionId: session.payment_intent,
+          orderId: result.insertedId,
+        });
+      }
+      res.send({
+        transactionId: session.payment_intent,
+        orderId: order._id,
+      });
+    });
+
+    //-------------------------------------- Customer Endpoints ---------------------------
+
+    // get all orders of a customer by email
+    app.get("/my-orders/:email", async (req, res) => {
+      const email = req.params.email;
+
+      const result = await ordersCollection
+        .find({
+          customer: email,
+        })
+        .toArray();
+
+        res.send(result);
+    });
+
+
+
+    //-------------------------------------- Seller Endpoints ---------------------------
+
+    // get all orders of a seller by email
+    app.get("/manage-orders/:email", async (req, res) => {
+      const email = req.params.email;
+
+      const result = await ordersCollection
+        .find({
+          'seller.email': email,
+        })
+        .toArray();
+
+        res.send(result);
+    });
+
+
+    // get all inventory items of a seller by email
+    app.get("/my-inventory/:email", async (req, res) => {
+      const email = req.params.email;
+
+      const result = await plantsCollection
+        .find({
+          'seller.email': email,
+        })
+        .toArray();
+
+        res.send(result);
+    });
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
